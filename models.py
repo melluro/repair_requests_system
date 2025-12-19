@@ -1,66 +1,64 @@
-from database import get_connection
+from dataclasses import dataclass
+from typing import Optional
 
-def create_tables():
-    connection = get_connection()
-    cursor = connection.cursor()
+@dataclass
+class Role:
+    id: int
+    name: str
+    description: Optional[str] = None
 
-    # Таблица пользователей
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL UNIQUE,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL  -- 'admin', 'operator', 'specialist'
-        )
-    """)
+@dataclass
+class User:
+    id: int
+    username: str
+    full_name: str
+    role_id: int
+    role_name: Optional[str] = None  # Populated from join
 
-    # Таблица клиентов
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS clients (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            full_name TEXT NOT NULL,
-            phone TEXT NOT NULL
-        )
-    """)
+@dataclass
+class Client:
+    id: int
+    full_name: str
+    phone: str
 
-    # Таблица специалистов
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS specialists (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            full_name TEXT NOT NULL,
-            specialization TEXT
-        )
-    """)
+@dataclass
+class Equipment:
+    id: int
+    serial_number: str
+    model: str
+    type: str
+    client_id: int
 
-    # Таблица заявок
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS requests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            request_number TEXT NOT NULL UNIQUE,
-            created_date TEXT NOT NULL,
-            equipment_type TEXT NOT NULL,
-            equipment_model TEXT NOT NULL,
-            problem_description TEXT NOT NULL,
-            status TEXT NOT NULL,
-            client_id INTEGER NOT NULL,
-            assigned_specialist_id INTEGER,
-            start_repair_date TEXT,
-            end_repair_date TEXT,
-            FOREIGN KEY (client_id) REFERENCES clients(id),
-            FOREIGN KEY (assigned_specialist_id) REFERENCES specialists(id)
-        )
-    """)
+@dataclass
+class Request:
+    id: int
+    request_number: str
+    creation_date: str
+    problem_description: str
+    client_id: int
+    equipment_id: int
+    status_id: int
+    status_name: Optional[str] = None
+    client_name: Optional[str] = None
+    client_phone: Optional[str] = None
+    equipment_model: Optional[str] = None
+    completion_date: Optional[str] = None
+    deadline_date: Optional[str] = None
+    assigned_specialists: Optional[list] = None # List of specialist names or IDs
 
-    # Таблица комментариев
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS comments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            request_id INTEGER NOT NULL,
-            comment_text TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            FOREIGN KEY (request_id) REFERENCES requests(id)
-        )
-    """)
+@dataclass
+class Comment:
+    id: int
+    request_id: int
+    user_id: int
+    text: str
+    created_at: str
+    user_name: Optional[str] = None
 
-    connection.commit()
-    connection.close()
+@dataclass
+class Part:
+    id: int
+    name: str
+    stock_quantity: int
+    price: float
+    quantity_used: Optional[int] = 0 # For request context
