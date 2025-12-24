@@ -83,6 +83,7 @@ def init_db(db_name=None):
             status_id INTEGER NOT NULL,
             completion_date TEXT,
             deadline_date TEXT,
+            help_needed INTEGER DEFAULT 0,
             FOREIGN KEY (client_id) REFERENCES clients(id),
             FOREIGN KEY (equipment_id) REFERENCES equipment(id),
             FOREIGN KEY (status_id) REFERENCES statuses(id)

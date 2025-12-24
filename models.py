@@ -44,6 +44,7 @@ class Request:
     equipment_model: Optional[str] = None
     completion_date: Optional[str] = None
     deadline_date: Optional[str] = None
+    help_needed: bool = False
     assigned_specialists: Optional[list] = None # List of specialist names or IDs
 
 @dataclass

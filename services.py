@@ -146,7 +146,7 @@ class RequestService:
         base_query = """
             SELECT r.id, r.request_number, r.creation_date, r.problem_description, 
                    r.client_id, r.equipment_id, r.status_id, s.name as status_name,
-                   c.full_name as client_name, c.phone as client_phone, e.model as eq_model, r.completion_date, r.deadline_date
+                   c.full_name as client_name, c.phone as client_phone, e.model as eq_model, r.completion_date, r.deadline_date, r.help_needed
             FROM requests r
             JOIN statuses s ON r.status_id = s.id
             JOIN clients c ON r.client_id = c.id
@@ -170,7 +170,7 @@ class RequestService:
         if where_clauses:
             base_query += " WHERE " + " AND ".join(where_clauses)
             
-        base_query += " ORDER BY r.creation_date DESC"
+        base_query += " ORDER BY r.help_needed DESC, r.creation_date DESC"
         
         cursor.execute(base_query, tuple(params))
         rows = cursor.fetchall()
@@ -190,7 +190,8 @@ class RequestService:
                 client_phone=row[9],
                 equipment_model=row[10],
                 completion_date=row[11],
-                deadline_date=row[12]
+                deadline_date=row[12],
+                help_needed=bool(row[13])
             )
             # Fetch assigned specialists
             cursor.execute("""
@@ -293,6 +294,34 @@ class RequestService:
         rows = cursor.fetchall()
         conn.close()
         return [Comment(id=r[0], request_id=r[1], user_id=r[2], text=r[3], created_at=r[4], user_name=r[5]) for r in rows]
+
+    @staticmethod
+    def toggle_help_needed(request_id, needed: bool):
+        conn = get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("UPDATE requests SET help_needed = ? WHERE id = ?", (1 if needed else 0, request_id))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error toggling help: {e}")
+            return False
+        finally:
+            conn.close()
+
+    @staticmethod
+    def update_deadline(request_id, new_date_str):
+        conn = get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("UPDATE requests SET deadline_date = ? WHERE id = ?", (new_date_str, request_id))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error updating deadline: {e}")
+            return False
+        finally:
+            conn.close()
 
 class PartService:
     @staticmethod

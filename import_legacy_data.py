@@ -1,7 +1,9 @@
 import csv
 import sqlite3
 import datetime
-from database import get_connection
+import os
+from pathlib import Path
+from database import get_connection, init_db
 
 # Mappings
 ROLE_MAP = {
@@ -31,9 +33,32 @@ def parse_date(date_str):
     except ValueError:
         return None
 
-def run_import():
+def run_import(base_dir: str = None):
+    if base_dir is None:
+        base_dir = os.environ.get("IMPORT_DIR", "import_БытСервис")
+    base_path = Path(base_dir)
+    users_csv = base_path / "Пользователи" / "inputDataUsers.csv"
+    requests_csv = base_path / "Заявки" / "inputDataRequests.csv"
+    comments_csv = base_path / "Комментарии" / "inputDataComments.csv"
+
+    if not users_csv.exists():
+        raise FileNotFoundError(f"Не найден файл пользователей: {users_csv}")
+    if not requests_csv.exists():
+        raise FileNotFoundError(f"Не найден файл заявок: {requests_csv}")
+    if not comments_csv.exists():
+        raise FileNotFoundError(f"Не найден файл комментариев: {comments_csv}")
+
+    init_db()
     conn = get_connection()
     cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM comments")
+    cursor.execute("DELETE FROM request_specialists")
+    cursor.execute("DELETE FROM requests")
+    cursor.execute("DELETE FROM equipment")
+    cursor.execute("DELETE FROM clients")
+    cursor.execute("DELETE FROM users")
+    conn.commit()
     
     # ID Mappings (Old CSV ID -> New DB ID)
     user_id_map = {}   # For employees
@@ -41,7 +66,7 @@ def run_import():
     request_id_map = {} 
 
     print("Importing Users and Clients...")
-    with open('Кондиционеры_данные/Пользователи/inputDataUsers.csv', 'r', encoding='utf-8-sig') as f:
+    with users_csv.open('r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f, delimiter=';')
         for row in reader:
             old_id = row['userID']
@@ -75,7 +100,7 @@ def run_import():
                     user_id_map[old_id] = cursor.lastrowid
 
     print("Importing Requests...")
-    with open('Кондиционеры_данные/Заявки/inputDataRequests.csv', 'r', encoding='utf-8-sig') as f:
+    with requests_csv.open('r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f, delimiter=';')
         for row in reader:
             old_req_id = row['requestID']
@@ -129,19 +154,17 @@ def run_import():
                     pass
 
     print("Importing Comments...")
-    # Comments CSV: commentID;message;masterID;requestID
-    # Check delimiter first, assumed ;
     try:
-        with open('Кондиционеры_данные/Комментарии/inputDataComments.csv', 'r', encoding='utf-8-sig') as f:
+        with comments_csv.open('r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f, delimiter=';')
             for row in reader:
                 msg = row['message']
                 master_id_old = row['masterID']
                 req_id_old = row['requestID']
-                
+
                 real_user_id = user_id_map.get(master_id_old)
                 real_req_id = request_id_map.get(req_id_old)
-                
+
                 if real_user_id and real_req_id:
                     cursor.execute("INSERT INTO comments (request_id, user_id, text, created_at) VALUES (?, ?, ?, ?)",
                                    (real_req_id, real_user_id, msg, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))

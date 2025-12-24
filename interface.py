@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox, simpledialog
 from datetime import datetime
 import urllib.request
 import io
+import qrcode
 try:
     from PIL import Image, ImageTk
     HAS_PIL = True
@@ -359,6 +360,11 @@ class MainApp(tk.Tk):
         dot = tk.Label(header_frame, text="●", fg=color, bg="#FFFFFF", font=("Arial", 16))
         dot.pack(side=tk.LEFT, padx=5)
         
+        # Help Needed Badge
+        if req.help_needed:
+            help_lbl = tk.Label(header_frame, text=" SOS ", fg="white", bg="#DC3545", font=("Segoe UI", 8, "bold"))
+            help_lbl.pack(side=tk.LEFT, padx=5)
+        
         # Content Row
         content_frame = ttk.Frame(card, style="Card.TFrame")
         content_frame.pack(fill=tk.X)
@@ -535,6 +541,9 @@ class RequestDetailDialog(tk.Toplevel):
         ttk.Label(info_frame, text=f"Оборудование: {self.request.equipment_model}").grid(row=1, column=1, **grid_opts)
         ttk.Label(info_frame, text=f"Срок: {self.request.deadline_date}").grid(row=2, column=0, **grid_opts)
         
+        if self.request.help_needed:
+            ttk.Label(info_frame, text="⚠️ ТРЕБУЕТСЯ ПОМОЩЬ", foreground="red", font=("Segoe UI", 10, "bold")).grid(row=2, column=1, **grid_opts)
+
         ttk.Label(info_frame, text="Проблема:").grid(row=3, column=0, **grid_opts)
         ttk.Label(info_frame, text=self.request.problem_description, wraplength=400).grid(row=3, column=1, **grid_opts)
         
@@ -551,18 +560,24 @@ class RequestDetailDialog(tk.Toplevel):
             status_opts = ["В работе", "Ожидание запчастей", "Выполнена"]
             self.status_menu = ttk.OptionMenu(action_frame, self.status_var, status_opts[0], *status_opts, command=self.update_status)
             self.status_menu.pack(side=tk.LEFT, padx=5)
-            
+
+        # Help Request (Specialist)
+        if self.user.role_name == 'Specialist':
+             help_text = "Отменить запрос помощи" if self.request.help_needed else "Запросить помощь"
+             ttk.Button(action_frame, text=help_text, command=self.toggle_help, style="Outline.TButton").pack(side=tk.LEFT, padx=5)
+
         # Assign Specialist (Manager, Quality Manager, Admin, Operator)
         if self.user.role_name in ['Manager', 'Quality Manager', 'Administrator', 'Operator']:
             ttk.Button(action_frame, text="Назначить спец.", command=self.assign_specialist_dialog, style="TButton").pack(side=tk.LEFT, padx=5)
             
-        # Extend Deadline (Quality Manager only)
+        # Quality Manager Actions
         if self.user.role_name == 'Quality Manager':
             ttk.Button(action_frame, text="Продлить срок", command=self.extend_deadline_dialog, style="Accent.TButton").pack(side=tk.LEFT, padx=5)
+            if self.request.help_needed:
+                ttk.Button(action_frame, text="Помощь оказана", command=lambda: self.toggle_help(force_off=True), style="TButton").pack(side=tk.LEFT, padx=5)
             
-        # QR Code (If completed)
-        if self.request.status_name == 'Completed':
-            ttk.Button(action_frame, text="Показать QR-код", command=self.show_qr, style="TButton").pack(side=tk.LEFT, padx=5)
+        # QR Code (Always visible for testing, typically for Completed)
+        ttk.Button(action_frame, text="Показать QR-код", command=self.show_qr, style="TButton").pack(side=tk.LEFT, padx=5)
 
         # Parts Section
         parts_frame = ttk.LabelFrame(main_frame, text="Запчасти", padding=10)
@@ -709,35 +724,53 @@ class RequestDetailDialog(tk.Toplevel):
             self.parent.load_data()
             self.destroy()
 
+    def toggle_help(self, force_off=False):
+        new_state = False if force_off else not self.request.help_needed
+        
+        if RequestService.toggle_help_needed(self.request.id, new_state):
+            msg = "Помощь запрошена" if new_state else "Запрос помощи отменен"
+            if force_off: msg = "Помощь отмечена как оказанная"
+            messagebox.showinfo("Успех", msg)
+            self.parent.load_data()
+            self.destroy()
+        else:
+            messagebox.showerror("Ошибка", "Не удалось изменить статус помощи")
+
     def show_qr(self):
-        # Generate QR code URL
         data = f"{FEEDBACK_URL}?request_id={self.request.request_number}"
         
         if not HAS_PIL:
-            messagebox.showinfo("QR-код", f"Пожалуйста, посетите эту ссылку для отзыва:\n{data}\n\n(Установите библиотеку 'pillow' для просмотра QR-кода)")
+            messagebox.showwarning("Внимание", "Библиотека PIL (Pillow) не установлена. QR-код не может быть отображен.")
             return
 
-        # Use api.qrserver.com
-        api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={data}"
-        
         try:
-            with urllib.request.urlopen(api_url) as u:
-                raw_data = u.read()
+            # Local generation using qrcode library
+            qr = qrcode.QRCode(box_size=10, border=4)
+            qr.add_data(data)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
             
-            image = Image.open(io.BytesIO(raw_data))
+            # Convert to PhotoImage
+            bio = io.BytesIO()
+            img.save(bio, format="PNG")
+            bio.seek(0)
+            
+            image = Image.open(bio)
             photo = ImageTk.PhotoImage(image)
             
             qr_win = tk.Toplevel(self)
             qr_win.title("QR-код для отзыва")
-            qr_win.geometry("300x350")
+            qr_win.geometry("350x400")
             
             frame = ttk.Frame(qr_win, padding=20)
             frame.pack(fill=tk.BOTH, expand=True)
             
             lbl = ttk.Label(frame, image=photo)
-            lbl.image = photo # Keep reference
+            lbl.image = photo
             lbl.pack(padx=10, pady=10)
-            ttk.Label(frame, text="Отсканируйте, чтобы оставить отзыв!").pack(pady=5)
+            
+            ttk.Label(frame, text=f"Заявка: {self.request.request_number}", font=("Segoe UI", 10, "bold")).pack(pady=(5,0))
+            ttk.Label(frame, text="Отсканируйте для отзыва", foreground="#6C757D").pack(pady=5)
             
         except Exception as e:
             messagebox.showerror("Ошибка", f"Не удалось сгенерировать QR: {e}")
