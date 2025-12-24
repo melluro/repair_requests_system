@@ -3,7 +3,12 @@ from tkinter import ttk, messagebox, simpledialog
 from datetime import datetime
 import urllib.request
 import io
-import qrcode
+try:
+    import qrcode
+    HAS_QRCODE = True
+except ImportError:
+    HAS_QRCODE = False
+    
 try:
     from PIL import Image, ImageTk
     HAS_PIL = True
@@ -178,7 +183,7 @@ class MainApp(tk.Tk):
     def __init__(self, user):
         super().__init__()
         self.user = user
-        self.title(f"Система ремонта - {user.full_name}")
+        self.title(f"ООО БытСервис - {user.full_name}")
         self.geometry("1200x800")
         self.configure(bg="#F8F9FA")
         
